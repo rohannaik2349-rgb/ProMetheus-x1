@@ -1,0 +1,12 @@
+{
+  "dataset": "SteelBlastQC",
+  "version": "pc-wrn50-v1",
+  "seed": 42,
+  "split_hash": "a4f89d31c0e2",
+  "frozen_backbone": "wide_resnet50_2",
+  "channels": 3,
+  "colour_space": "RGB",
+  "tile_size": 256,
+  "tile_stride": 224,
+  "created_at": "2026-11-25T18:00:00Z"
+}
