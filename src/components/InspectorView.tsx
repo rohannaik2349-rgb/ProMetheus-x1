@@ -225,32 +225,92 @@ export const InspectorView: React.FC<InspectorViewProps> = ({
         setIsInspecting(false);
       }
     } else {
-      // Offline mode client-side heuristic validation
-      setTimeout(() => {
+      // Offline / Sim Mode: pixel-level client-side steel validation
+      try {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Failed to decode image'));
+          img.src = localUrl;
+        });
+
         if (switchRequestRef.current !== reqId) return;
-        // Quick color check: non-steel objects (capsule, plastic, paper, wood) have higher chroma/saturation
-        const isLikelyNonSteel = file.name.toLowerCase().includes('capsule') ||
-                                 file.name.toLowerCase().includes('plastic') ||
-                                 file.name.toLowerCase().includes('paper') ||
-                                 file.name.toLowerCase().includes('wood') ||
-                                 file.name.toLowerCase().includes('non_steel');
-        
-        if (isLikelyNonSteel) {
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        let isNonSteel = false;
+        let rejectionConfidence = 0.94;
+
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, 128, 128);
+          const { data } = ctx.getImageData(0, 0, 128, 128);
+          const n = 128 * 128;
+          let satSum = 0;
+          let whiteBgCount = 0;
+          let nonRustChromaCount = 0;
+          let gradSum = 0;
+          const gray = new Float32Array(n);
+
+          for (let i = 0; i < n; i++) {
+            const idx = i * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            const maxC = Math.max(r, g, b);
+            const minC = Math.min(r, g, b);
+            const sat = maxC > 0 ? (maxC - minC) / maxC : 0;
+            satSum += sat;
+
+            if (r > 225 && g > 225 && b > 225) whiteBgCount++;
+            if (sat > 0.28 && !(r > g && g >= b)) nonRustChromaCount++;
+            gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+          }
+
+          let gradCount = 0;
+          for (let y = 0; y < 127; y++) {
+            for (let x = 0; x < 127; x++) {
+              const p = y * 128 + x;
+              gradSum += Math.abs(gray[p + 1] - gray[p]) + Math.abs(gray[p + 128] - gray[p]);
+              gradCount += 2;
+            }
+          }
+
+          const meanSat = satSum / n;
+          const whiteBgFrac = whiteBgCount / n;
+          const nonRustChromaFrac = nonRustChromaCount / n;
+          const meanGrad = gradSum / gradCount;
+
+          // Reject studio backgrounds, capsules, plastics, paper, wood, colorful objects, or smooth flat graphics
+          if (whiteBgFrac > 0.12 || nonRustChromaFrac > 0.015 || meanSat > 0.45 || meanGrad < 1.8) {
+            isNonSteel = true;
+            rejectionConfidence = Math.min(0.99, Math.max(0.84, 0.80 + whiteBgFrac * 0.2 + nonRustChromaFrac * 0.5));
+          }
+        }
+
+        if (isNonSteel) {
           const matData: MaterialValidation = {
             material: 'non_steel',
-            confidence: 0.96,
+            confidence: Number(rejectionConfidence.toFixed(2)),
             supported: false,
-            message: 'Material rejected: Non-steel object detected. PROMETHEUS-X strictly inspects industrial steel surfaces only.'
+            message: `Material rejected: Non-steel object detected (${Math.round(rejectionConfidence * 100)}% confidence). PROMETHEUS-X strictly inspects industrial steel surfaces only.`
           };
           setMaterialValidation(matData);
           setActiveResult(null);
           setApiError(matData.message);
           setHasAnalyzed(true);
           setIsInspecting(false);
+          onAddAuditLog('REJECT_NON_STEEL', 'images', 0, {
+            filename: file.name,
+            material: 'non_steel',
+            confidence: matData.confidence,
+            reason: 'Non-steel object rejected before defect pipeline'
+          });
         } else {
           setMaterialValidation({
             material: 'steel',
-            confidence: 0.97,
+            confidence: 0.95,
             supported: true,
             message: 'Verified industrial steel surface.'
           });
@@ -302,7 +362,11 @@ export const InspectorView: React.FC<InspectorViewProps> = ({
           setHasAnalyzed(true);
           setIsInspecting(false);
         }
-      }, 500);
+      } catch (err: any) {
+        setApiError(err?.message || 'Could not validate image format.');
+        setActiveResult(null);
+        setIsInspecting(false);
+      }
     }
   };
 
