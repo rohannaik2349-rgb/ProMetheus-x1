@@ -21,9 +21,6 @@ export const DefectFamiliesView: React.FC = () => {
             Unsupervised Defect Families & Empirical Detection Limits
           </h2>
         </div>
-        <p className="text-xs text-slate-600 mt-1 max-w-3xl leading-relaxed">
-          Open-set inspection flags anomalies without needing predefined defect classes. Regional backbone patch embeddings are clustered in 1536-dimensional space using cosine distance (Section 10 Add-on A), while synthetic CutPaste trials map the physical limits of optical defect resolution (Add-on B).
-        </p>
       </div>
 
       {/* Grid: Families Cards + Synthetic Matrix */}
@@ -124,11 +121,6 @@ export const DefectFamiliesView: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs text-slate-600 space-y-1">
-            <strong className="text-slate-800 block">Empirical Resolution Limit:</strong>
-            Any defect above 20 pixels (~1.6mm) is captured with &gt;96% recall down to 0.5 contrast. Real-world defect recall across SteelBlastQC test set stands at <strong>98.4% AUROC</strong>.
           </div>
         </div>
       </div>
